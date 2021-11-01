@@ -97,7 +97,7 @@ library(knitr)
 proj_join %>% group_by(Country) %>% summarize_if(is.numeric, list(mean=mean, max=max, min=min)) %>% pivot_longer(-1) %>% pivot_wider(names_from = "name", values_from= "value") -> table1
 table1 %>% kable(digits = 2, align = 'c', col.names=str_to_title(names(.)), caption = "Summary Statistics") -> table1
 table1
-proj_join %>% group_by_if(is.character) %>% summarize(count= n()) -> table2
+proj_join %>% group_by(Country, who_wins) %>% summarize(count= n()) -> table2
 table2 %>% kable(digits = 2, align = 'c', col.names=str_to_title(names(.)), caption = "Frequency of Countries in the WorldCup") -> table2
 table2
 ```
