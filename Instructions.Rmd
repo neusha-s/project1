@@ -43,11 +43,86 @@ Note that you will need to read these datasets into R at the top of your Rmd fil
 library(tidyverse)
 data1 <- read_csv("/path/to/dataset1.csv")
 data2 <- read_csv("/path/to/dataset2.csv")
+gdp <- read_csv(
+
+#Link to github explanation is in beginning of lecture from 10/28
+
 
 #or, if you'd prefer to read it in from some remote location
 
 data1 <- read_csv("https://some.website/dataset1.csv")
 data2 <- read_csv("https://some.website/dataset2.csv")
+vaxrates <- read_csv("https://data.cdc.gov/api/views/fhky-rtsk/rows.csv?accessType=DOWNLOAD")
+
+glimpse(WorldCupMatches)
+WorldCupMatches %>% select(-2, -3, -4, -11, -15, -16) %>% select(-11, -12) -> worldcup
+head(worldcup)
+glimpse(GDP)
+GDP %>% pivot_longer( cols="geo.time.gdp_total_yearly_growth", names_to= "Country", values_to = "GDP" ) %>% select(-1) -> gdp
+gdp %>% separate("GDP", into = c("Country", "Year", "GDP Yearly Growth"), sep= ",") -> gdp
+gdp %>% mutate_at(vars(starts_with("yea")),funs(as.numeric)) -> gdp
+head(gdp)
+gdp %>% filter(Year > 1929) %>% filter(Year < 2014) 
+#tidy gdp
+glimpse(worldcup)
+#852 rows, 12 columns
+glimpse(gdp)
+#18379 rows, 3 columns
+gdp %>% count(n_distinct(Year)) 
+gdp %>% count(n_distinct(Country))
+gdp %>% count(n_distinct(`GDP Yearly Growth`))
+#84 years, 221 countries, 10130 GDPs
+worldcup %>% mutate(Home_Team_Goals= Half.time.Home.Goals + Home.Team.Goals) %>% mutate(Away_Team_Goals= Half.time.Away.Goals + Away.Team.Goals) %>% mutate(who_wins= ifelse(Home_Team_Goals > Away_Team_Goals, "Home", "Away")) %>% mutate(Home_Team_Initials = str_replace(Home.Team.Initials, ".+", tolower)) %>% select(-4, -5, -8,-9,-10, -11) %>% mutate(Away_Team_Initials = str_replace(Away.Team.Initials, ".+", tolower)) %>% select(-6) -> worldcup
+glimpse(worldcup)
+glimpse(gdp)
+#tidy world cup
+inner_join(gdp, worldcup, by=c("Country"= "Home_Team_Initials", "Year" = "Year")) -> proj_join
+#innerjoin
+#DPLYR
+# Mutate
+proj_join %>% mutate_at(vars(starts_with("GDP")), funs(as.numeric)) -> proj_join
+worldcup %>% mutate(Home_Team_Goals= Half.time.Home.Goals + Home.Team.Goals) %>% mutate(Away_Team_Goals= Half.time.Away.Goals + Away.Team.Goals) %>% mutate(who_wins= ifelse(Home_Team_Goals > Away_Team_Goals, "Home", "Away"))
+# Filter
+proj_join %>% filter(Country == "bra") %>% filter( Year == 2010)
+glimpse(proj_join)
+#In 2010, Brazil had a GDP growth of 7.534 (which is a lot) and they won 3 matches in the WC
+# Select
+proj_join %>% select(1:3,8, 9, 10, everything()) -> proj_join
+proj_join %>% select(-11)  -> proj_join
+# Stringr
+proj_join %>% str_match_all("19[0-9]+")
+# Summarize (5)
+proj_join %>% group_by(Country) %>% summarize(homegoalsavg= mean(Home_Team_Goals)) %>% arrange(desc(homegoalsavg))
+#Turkey has the record for highest average amount of goals scored as a home team in the World Cup, 8 total
+proj_join %>% filter(Country == "tur") %>% group_by(Year, Home_Team_Goals, Away_Team_Goals) %>% summarize(sum(`GDP Yearly Growth`)) 
+#Surprisingly, even though in 1954 Turkey scored a total of 11 goals indicating a pretty successful year, their GDP dropped by 3 points, where as in 2002 they had a total of 5 goals in their time in the world cup but experienced a 7.70 point increase in GDP
+GDP_Change <- function(x)(abs(x)/18)
+proj_join %>% filter(Country == "bra") %>% summarize(sum= sum(`GDP Yearly Growth`)) %>% summarize(GDP_Change(sum))
+# For Brazil, their average absolute GDP Change over the years that they've played in the world cup is 21.54
+proj_join %>% summarize(median(Year))
+#The median year of the dataset is 1986
+proj_join %>% group_by(Country) %>% summarize(sd(Home_Team_Goals))
+#Turkey which had the highest average for goals as a home team had a standard deviation of 4.24 indicating that they varied signficantly over the years in performance
+proj_join %>% group_by(Country) %>% summarize(frequency= n()) %>% slice_max(frequency)
+#Brazil appears the most often in the dataset
+proj_join %>% group_by(Country, Year) %>% summarize(cumsum(`GDP Yearly Growth`))
+#Let's you see the change in GDP Growth over the years
+
+# Tables of counts of categorical variables
+proj_join %>% group_by(Country) %>% summarize_if(is.numeric, list(mean=mean, max=max, min=min)) %>% pivot_longer(-1) %>% pivot_wider(names_from = "name", values_from= "value") -> table1
+table1 %>% kable(digits = 2, align = 'c', col.names=str_to_title(names(.)), caption = "Summary Statistics") -> table1
+proj_join %>% group_by_if(is.character) %>% summarize(count= n()) -> table2
+table2 %>% kable(digits = 2, align = 'c', col.names=str_to_title(names(.)), caption = "Frequency of Countries in the WorldCup") -> table2
+
+
+
+
+
+#Pretty tables in WS 13
+
+
+
+
 ```
 
 ### Guidelines
@@ -125,7 +200,7 @@ Prerequisite: Finding appropriate data from at least two sources per the instruc
 - Use all six core `dplyr` functions in the service of generating summary tables/statistics (14 pts)
    
     - Use mutate at least once to generate a variable that is a function of at least one other variable
-    - Use at least one `stringr` function with to do something with regex
+    - Use at least one `stringr` function with something to do with regex
 
 - Compute summary statistics for each of your variables using `summarize` (fine to use variants such as `summarize_all`) alone and with `group_by` (if you have more than 10 variables, fine to just focus on 10 of them) (20 pts)
 
@@ -193,6 +268,7 @@ If you are totally clueless and have no direction at all, log into the server an
 
 ```{R eval=F}
 data(package = .packages(all.available = TRUE))
+?HSAUR3::BCG
 ```
 
 This will print out a list of **ALL datasets in ALL packages** installed on the server (a ton)! Scroll until your eyes bleed! Actually, do not scroll that much... To start with something more manageable, just run the command on your own computer, or just run `data()` to bring up the datasets in your current environment. To read more about a dataset, do `?packagename::datasetname`. 

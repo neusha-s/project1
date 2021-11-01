@@ -19,72 +19,116 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Neusha Saboorian
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+In this project, a data set reporting on World Cup matches from its origin in 1930 to 2010 and another data set reporting the annual growth in Gross Domestic Product (GDP) in all countries worldwide from the 1800's to 2014 were selected to observe a possible correlation between success in the World Cup and change in a country's wealth (measured in GDP). The organization that orchestrates the World Cup every four years is known as the Fédération Internationale de Football Association (FIFA) and has been involved in a few scandals throughout its history suggesting corruption in the association due to FIFA officials accepting bribes from participating countries. In addition, despite FIFA's headquarters being situated in Switzerland, there has been explicit outrage over Brazil's heavy investment in their team's success as they have been top-runners of the game for most of its matches. The controversy stems from allegations that the Brazilian government blatantly ignores the vast wealth gap in their country in order to allocate funds to their football team. Considering the history behind the World Cup, I decided to examine the yearly GDP change in all countries reported to play in the World Cup through the 20th and 21st centuries. 
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
+library(tidyverse)
+WorldCupMatches <- read_csv("/stor/home/ncs866/project1/WorldCupMatches.csv")
+glimpse(WorldCupMatches)
+GDP <- read_csv("/stor/home/ncs866/project1/GDP.csv")
+glimpse(GDP)
 
 ```
 
 #### Tidying: Reshaping
 
-If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+Initial tidying was performed on the "worldcup" and "gdp" data sets here, however wrangling was also necessary in order to mutate variables in the "worldcup" data set as a function of another. Further tidying was performed on the joined data set as can be found in the 'Wrangling' section. 
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
-```
+GDP %>% pivot_longer( cols="geo,time,gdp_total_yearly_growth", names_to= "Country", values_to = "GDP" ) %>% select(-1) -> gdp
+gdp %>% separate("GDP", into = c("Country", "Year", "GDP Yearly Growth"), sep= ",") -> gdp
+gdp %>% mutate_at(vars(starts_with("yea")),funs(as.numeric)) -> gdp
+head(gdp)
 
+WorldCupMatches %>% mutate(Home_Team_Goals= `Half-time Home Goals` + `Home Team Goals`) %>% mutate(Away_Team_Goals= `Half-time Away Goals` + `Away Team Goals`) %>% mutate(who_wins= ifelse(Home_Team_Goals > Away_Team_Goals, "Home", "Away")) %>% mutate(Home_Team_Initials = str_replace(`Home Team Initials`, ".+", tolower)) %>% select(-4, -5, -8,-9,-10, -11) %>% mutate(Away_Team_Initials = str_replace('Away Team Initials', ".+", tolower)) %>% select(-6) -> worldcup
+glimpse(worldcup)
+
+
+```
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
-
-# your joining code
+inner_join(gdp, worldcup, by=c("Country"= "Home_Team_Initials", "Year" = "Year")) -> proj_join
+glimpse(proj_join)
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+An inner join was performed on the "worldcup" and "gdp" data sets through two common ID variables; country and year. The inner join was necessary in order to drop any years that did not overlap between the two data sets. The initials of the home team in the "worldcup" data set was selected to join with the countries in the "gdp" data set because they had the same format of the first three letters of each country name, and performing an inner join would allow each country with a match in both data sets to align. After joining, the "worldcup" data set which initially had 852 rows and 12 columns lost two columns and 400 rows. In addition, the "gdp" data set which originally was tidied into three columns now only held "GDP Yearly Growth" as a unique column and was condensed from a data range of 84 years to 21 distinct years. 
 
 ####  Wrangling
 
 ```{R}
-# your wrangling code
+#Mutate
+#Convert GDP to numeric
+proj_join %>% mutate_at(vars(starts_with("GDP")), funs(as.numeric)) -> proj_join
 
-# your wrangling code
+# Filter
+proj_join %>% filter(Country == "bra") %>% filter( Year == 2010)
+#In 2010, Brazil had a GDP growth of 7.534 and they won 3 matches in the WC
 
-# your wrangling code
+# Select
+proj_join %>% select(1:3,8, 9, 10, everything()) -> proj_join
+proj_join %>% select(-11)  -> proj_join
+
+# Summarize 
+proj_join %>% group_by(Country) %>% summarize(homegoalsavg= mean(Home_Team_Goals)) %>% arrange(desc(homegoalsavg))
+#Turkey has the record for highest average amount of goals scored as a home team in the World Cup, 8 total
+proj_join %>% filter(Country == "tur") %>% group_by(Year, Home_Team_Goals, Away_Team_Goals) %>% summarize(sum(`GDP Yearly Growth`)) 
+#Surprisingly, even though in 1954 Turkey scored a total of 11 goals indicating a pretty successful year, their GDP dropped by 3 points, where as in 2002 they had a total of 5 goals in their time in the world cup but experienced a 7.70 point increase in GDP
+GDP_Change <- function(x)(abs(x)/18)
+proj_join %>% filter(Country == "bra") %>% summarize(sum= sum(`GDP Yearly Growth`)) %>% summarize(GDP_Change(sum))
+# For Brazil, their average absolute GDP Change over the years that they've played in the world cup is 21.54
+proj_join %>% summarize(median(Year))
+#The median year of the dataset is 1986
+proj_join %>% group_by(Country) %>% summarize(sd(Home_Team_Goals))
+#Turkey which had the highest average for goals as a home team had a standard deviation of 4.24 indicating that they varied significantly over the years in performance
+proj_join %>% group_by(Country) %>% summarize(frequency= n()) %>% slice_max(frequency)
+#Brazil appears the most often in the dataset
+proj_join %>% group_by(Country, Year) %>% summarize(cumsum(`GDP Yearly Growth`))
+#Let's you see the change in GDP Growth over the years, the USA hit its peak cumulative GDP growth in 1950 after recovering from the Great Depression, and has been fluctuating with an overall decline ever since 
+
+
+# Tables of counts of categorical variables
+library(knitr)
+proj_join %>% group_by(Country) %>% summarize_if(is.numeric, list(mean=mean, max=max, min=min)) %>% pivot_longer(-1) %>% pivot_wider(names_from = "name", values_from= "value") -> table1
+table1 %>% kable(digits = 2, align = 'c', col.names=str_to_title(names(.)), caption = "Summary Statistics") -> table1
+table1
+proj_join %>% group_by_if(is.character) %>% summarize(count= n()) -> table2
+table2 %>% kable(digits = 2, align = 'c', col.names=str_to_title(names(.)), caption = "Frequency of Countries in the WorldCup") -> table2
+table2
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+The data set "proj_join" now contains data about the World Cup matches, total goals for each time, the year it occurred and more; organized by country and their change in annual GDP for that year. As seen when tidying, the total amount of goals for both the home and away team had been calculated from the "World Cup Matches" data set and a new variable entitled "who_wins" noted which team scored the most goals per match. Proj_join was then subjected to a series of wrangling functions in order to gain a better understanding of which countries are most active in the tournament, with Brazil taking the lead. An interesting finding is that countries who were most active in the World Cup overall (most of Latin America and Europe) tended to have a higher correlation to an increase in GDP over the years they played. Whereas Turkey, for example, actually held the record for the highest average number of goals scored as a home team (8) and even made 11 in 1954 but simultaneously experienced a drop in GDP that year by three points. This could be connected to the fact that Turkey as a team had a standard deviation of 4.24 goals in their years playing in the tournament as a home team, indicating that their performance varied in addition to their GDP. More wrangling was applied including a table of counts of summary statistics for each numeric variable in proj_join and another showing the frequency of the countries involved in the World Cup. The summary statistics outlined in the first table showed that China experienced the highest average GDP yearly growth of about 10 points. Although this could be due to multiple other economic factors, China has been under watch as it aims to become one of the world's superpowers in soccer and has been implicated in sponsoring FIFA during the organization's biggest scandal(s). The close relationship that FIFA holds with some of China's wealthiest businessman is considered even more suspicious, when noting that China has only ever played one match in the World Cup.
 
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+proj_join %>% ggplot(aes(x=Home_Team_Goals , y=`GDP Yearly Growth`, color=who_wins)) + geom_smooth(method = "lm",se=F) + geom_point(alpha=0.3) + ggtitle("Home Team Goals vs Annual GDP Growth") + ylab("GDP Yearly Growth") + xlab("Home Team Goals") + facet_wrap(~Year) + scale_x_continuous(limits = c(0,12)) + scale_y_continuous(breaks = seq(-20, 20, 10)) + theme(plot.title = element_text(hjust=0.5), axis.text.x = element_text(angle=90, hjust=1), panel.background = element_rect(fill="white", color="black", size=0.2, linetype = "solid")) + guides(color=guide_legend("Who Wins"))
+
 ```
 
-Your discussion of plot 1
+The plot above shows the relationship between the number of goals scored by the home team and the yearly growth of GDP, faceted by year. The legend indicates whether the away or home team won, and as expected as the number of home team goals increases the is a decline in the amount of wins amassed by the away teams. One common factor that can be observed from the plot above is that there is little to no correlation between the number of goals scored by the home team and the GDP growth they experienced. This trend remains fairly constant for all years reported in the data set, indicating that the assignment of "home team" does not have any correlation to overall success in the match nor the country's economy. 
 
 ```{R}
-# your plot 2
+proj_join %>% ggplot(aes(x=Country, y=`GDP Yearly Growth`, color=Home_Team_Goals)) + geom_boxplot() + geom_jitter(alpha=0.5, aes(color=Home_Team_Goals)) + ggtitle("GDP Yearly Growth by Country as a Function of Home Team Goals") +  theme(axis.text.x = element_text(angle=90, hjust=1, vjust = 1)) + scale_y_continuous(name= "GDP Yearly Growth", seq(-20,20, 2)) + guides(color=guide_legend("Home Team Goals"))
 ```
 
-Your discussion of plot 2
+This grouped box plot is organized by every country found in the data set mapping each value for their GDP Yearly growth from 1930-2010, and has the number of their goals scored as a home team as a function of this growth. The plot shows on average the number of home team goals is not related to whether the country's GDP would increase or decrease. There are a few countries that showed a wider range of GDP values over the years; namely Argentina, Austria, Cameroon, Romania, and Russia. While a select few of these countries' changes over the years can be related to other factors such as their independence and role as a world power, the one that is the most worthy of noting is Russia. Russia was heavily implicated as one of the countries that had bribed FIFA officials to award them the World Cup in 2018. On the plot, when Russia performed better in the World Cup it actually coincided with their highest decline in GDP that year. However, the year of their highest GDP growth overlaps with their lowest average score as a home team. This trend may seem backwards, as one would expect better performance in a better economic year, however Russia would not have to bribe FIFA officials if they were certain they could win on their own. 
 
 ```{R}
-# your plot 3
+proj_join %>% filter(Country == "bra") %>% ggplot(aes(x=Home_Team_Goals, y=`GDP Yearly Growth`)) + geom_point(stat = "summary", fun=mean, color= "yellow") + geom_smooth(method = "lm", se=F, color= "blue") + theme(axis.text.x = element_text(angle=90, vjust=0.1, hjust=0.1), panel.background = element_rect(fill = "darkgreen", color = "white", linetype = "solid")) + ggtitle("Average Changes in Brazil's GDP vs Goals Scored as the Home Team") + scale_y_continuous(name = "Average GDP Yearly Growth", breaks = seq(0,15, 1)) + scale_x_continuous(name = "Home Team Goals", breaks=(seq(0,10, 1)))
 ```
 
-Your discussion of plot 3
+This final plot focuses solely on Brazil's (note the colors!) performance record with the World Cup by mapping their goals scored each year playing as a home team with their average yearly GDP growth. Surprisingly, while the first plot indicated no correlation between home team goals and GDP growth over each of the years, when narrowing our focus to Brazil there is an apparent positive linear correlation between the two variables. At first glance, this may seem like common sense, as noted previously it is expected that the years in which Brazil is flourishing financially would result in better funding and performance for their team. However, Brazil's high profile involvement with the World Cup has led many to question whether it is solely their athletic performance that has led them to the country that holds the record for most World Cups won. The controversy is most prominent in Brazil's own people, who have adopted a hatred for the use of their tax dollars to fund and host World Cups while their country faces some of the most prominent income inequality internationally.  
 
 #### Concluding Remarks
 
-If any!
+Overall, while there is no definitive evidence to suggest a link to a country's economic success and their World Cup status, the data presented here could possibly suggest a slight degree of corruption within the organization that makes the World Cup happen. Further analyses are recommended to establish a direct conclusion that FIFA could be involved in the corruptive act of accepting bribes. 
 
 
 
